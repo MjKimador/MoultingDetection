@@ -5,6 +5,7 @@ from .database import engine, SessionLocal, Base
 from typing import List
 from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
 
 
 Base.metadata.create_all(bind=engine)
@@ -56,9 +57,6 @@ def get_risk_penguins(db: Session = Depends(get_db)):
 def stage_stats(db: Session = Depends(get_db)):
     return crud.get_stage_counts(db)
 
-#@app.get("/analytics/weight-distribution")
-#def weight_stats(db: Session = Depends(get_db)):
-#   return crud.get_weight_distribution(db)
 @app.get("/analytics/colony-stats")
 def colony_stats(db: Session = Depends(get_db)):
     return crud.get_colony_stats(db)

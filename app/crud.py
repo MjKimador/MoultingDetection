@@ -118,3 +118,32 @@ def delete_penguin(db: Session, penguin_id: int):
     db.delete(penguin)
     db.commit()
     return penguin
+def get_all_penguins_sorted(db: Session, sort_by: Optional[str] = None):
+    base_query = db.query(Penguin)
+
+    if sort_by == "weight":
+        base_query = base_query.order_by(Penguin.mass.asc())
+
+    elif sort_by == "risk":
+        # True first, then False (dangerous → safe)
+        base_query = base_query.order_by(Penguin.danger_flag.desc())
+
+    elif sort_by == "last_seen":
+        # Join with latest log
+        subquery = (
+            db.query(
+                MoultingLog.penguin_id,
+                func.max(MoultingLog.date).label("last_seen")
+            )
+            .group_by(MoultingLog.penguin_id)
+            .subquery()
+        )
+
+        base_query = (
+            db.query(Penguin)
+            .outerjoin(subquery, Penguin.id == subquery.c.penguin_id)
+            .order_by(subquery.c.last_seen.desc().nullslast())
+        )
+
+    return base_query.all()
+
