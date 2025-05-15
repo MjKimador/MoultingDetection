@@ -1,11 +1,13 @@
+from typing import Optional
 from fastapi import FastAPI, Depends
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from . import models, schemas, crud
 from .database import engine, SessionLocal, Base
 from typing import List
 from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional
+
 
 
 Base.metadata.create_all(bind=engine)
@@ -31,9 +33,37 @@ def get_db():
 def create_penguin(penguin: schemas.PenguinCreate, db: Session = Depends(get_db)):
     return crud.create_penguin(db, penguin)
 
-@app.get("/penguins/", response_model=List[schemas.PenguinOut])
-def read_penguins(db: Session = Depends(get_db)):
-    return crud.get_penguins(db)
+@app.get("/penguins/")
+def get_all_penguins(sort_by: Optional[str] = None, db: Session = Depends(get_db)):
+    penguins = crud.get_all_penguins_sorted(db, sort_by)
+
+    # Subquery to get latest log date per penguin
+    subquery = (
+        db.query(
+            models.MoultingLog.penguin_id.label("pid"),
+            func.max(models.MoultingLog.date).label("last_seen")
+        )
+        .group_by(models.MoultingLog.penguin_id)
+        .subquery()
+    )
+
+    # Build a lookup of penguin_id → last_seen
+    last_seen_lookup = {
+        row.pid: row.last_seen for row in db.query(subquery).all()
+    }
+
+    return [
+        {
+            "id": p.id,
+            "name": p.name,
+            "status": p.status,
+            "mass": p.mass,
+            "danger_flag": p.danger_flag,
+            "last_seen": last_seen_lookup.get(p.id, "Never logged")
+        }
+        for p in penguins
+    ]
+
 @app.post("/logs/", response_model=schemas.MoultingLogOut)
 def add_log(log: schemas.MoultingLogCreate, db: Session = Depends(get_db)):
     penguin = crud.get_penguin(db, log.penguin_id)
@@ -81,4 +111,34 @@ def delete_penguin(penguin_id: int, db: Session = Depends(get_db)):
     if result is None:
         raise HTTPException(status_code=404, detail="Penguin not found")
     return {"message": f"Penguin {penguin_id} deleted successfully."}
+
+@app.get("/penguins/search")
+def search_penguins(query: str, db: Session = Depends(get_db)):
+    penguins = crud.search_penguins(db, query)
+
+    # Get last_seen info
+    subquery = (
+        db.query(
+            models.MoultingLog.penguin_id.label("pid"),
+            func.max(models.MoultingLog.date).label("last_seen")
+        )
+        .group_by(models.MoultingLog.penguin_id)
+        .subquery()
+    )
+    last_seen_lookup = {
+        row.pid: row.last_seen for row in db.query(subquery).all()
+    }
+
+    return [
+        {
+            "id": p.id,
+            "name": p.name,
+            "status": p.status,
+            "mass": p.mass,
+            "danger_flag": p.danger_flag,
+            "last_seen": last_seen_lookup.get(p.id, p.created_at)
+        }
+        for p in penguins
+    ]
+
 

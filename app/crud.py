@@ -7,6 +7,8 @@ from app.models import Penguin
 from sqlalchemy import or_, and_
 from datetime import datetime, timedelta
 from app.models import Penguin, MoultingLog
+from typing import Optional
+
 
 def create_penguin(db: Session, penguin: schemas.PenguinCreate):
     db_penguin = models.Penguin(**penguin.dict(), last_seen=datetime.utcnow())
@@ -129,21 +131,34 @@ def get_all_penguins_sorted(db: Session, sort_by: Optional[str] = None):
         base_query = base_query.order_by(Penguin.danger_flag.desc())
 
     elif sort_by == "last_seen":
-        # Join with latest log
-        subquery = (
+        log_subquery = (
             db.query(
-                MoultingLog.penguin_id,
+                MoultingLog.penguin_id.label("pid"),
                 func.max(MoultingLog.date).label("last_seen")
             )
             .group_by(MoultingLog.penguin_id)
             .subquery()
         )
 
-        base_query = (
-            db.query(Penguin)
-            .outerjoin(subquery, Penguin.id == subquery.c.penguin_id)
-            .order_by(subquery.c.last_seen.desc().nullslast())
+        # Use COALESCE to default to penguin.created_at if no logs
+        result = (
+            db.query(Penguin, func.coalesce(log_subquery.c.last_seen, Penguin.created_at).label("effective_last_seen"))
+            .outerjoin(log_subquery, Penguin.id == log_subquery.c.pid)
+            .order_by(func.coalesce(log_subquery.c.last_seen, Penguin.created_at).desc())
+            .all()
         )
 
+        return [row[0] for row in result]
+
+
     return base_query.all()
+
+def search_penguins(db: Session, query: str):
+    if query.isdigit():
+        # Search by ID
+        return db.query(Penguin).filter(Penguin.id == int(query)).all()
+    else:
+        # Search by partial name (case insensitive)
+        return db.query(Penguin).filter(Penguin.name.ilike(f"%{query}%")).all()
+
 
