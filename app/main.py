@@ -7,6 +7,9 @@ from .database import engine, SessionLocal, Base
 from typing import List
 from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+import csv
+import io
 
 
 
@@ -140,5 +143,42 @@ def search_penguins(query: str, db: Session = Depends(get_db)):
         }
         for p in penguins
     ]
+
+@app.get("/penguins/download")
+def download_penguins_csv(db: Session = Depends(get_db)):
+    penguins = crud.get_all_penguins_sorted(db)  # Reuse existing function
+
+    # Get last_seen
+    subquery = (
+        db.query(
+            models.MoultingLog.penguin_id.label("pid"),
+            func.max(models.MoultingLog.date).label("last_seen")
+        )
+        .group_by(models.MoultingLog.penguin_id)
+        .subquery()
+    )
+    last_seen_lookup = {
+        row.pid: row.last_seen for row in db.query(subquery).all()
+    }
+
+    # Create in-memory CSV
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["id", "name", "status", "mass", "danger_flag", "last_seen"])
+
+    for p in penguins:
+        writer.writerow([
+            p.id,
+            p.name,
+            p.status,
+            p.mass,
+            p.danger_flag,
+            last_seen_lookup.get(p.id, p.created_at)
+        ])
+
+    output.seek(0)
+    return StreamingResponse(output, media_type="text/csv", headers={
+        "Content-Disposition": "attachment; filename=penguins.csv"
+    })
 
 
