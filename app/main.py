@@ -1,3 +1,6 @@
+from fastapi import UploadFile, File
+import os
+from datetime import datetime
 from typing import Optional
 from fastapi import FastAPI, Depends
 from sqlalchemy import func
@@ -10,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import csv
 import io
+
 
 
 
@@ -62,7 +66,8 @@ def get_all_penguins(sort_by: Optional[str] = None, db: Session = Depends(get_db
             "status": p.status,
             "mass": p.mass,
             "danger_flag": p.danger_flag,
-            "last_seen": last_seen_lookup.get(p.id, "Never logged")
+            "last_seen": last_seen_lookup.get(p.id, "Never logged"),
+            "images": [img.image_path for img in p.images]
         }
         for p in penguins
     ]
@@ -180,5 +185,34 @@ def download_penguins_csv(db: Session = Depends(get_db)):
     return StreamingResponse(output, media_type="text/csv", headers={
         "Content-Disposition": "attachment; filename=penguins.csv"
     })
+@app.post("/penguins/{penguin_id}/upload-image")
+def upload_penguin_image(
+    penguin_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    # Ensure penguin exists
+    penguin = db.query(models.Penguin).filter(models.Penguin.id == penguin_id).first()
+    if not penguin:
+        raise HTTPException(status_code=404, detail="Penguin not found")
+
+    # Save file to disk
+    file_ext = file.filename.split(".")[-1]
+    filename = f"{penguin_id}_{int(datetime.utcnow().timestamp())}.{file_ext}"
+    file_path = os.path.join("images", filename)
+
+    with open(file_path, "wb") as image_file:
+        image_file.write(file.file.read())
+
+    # Save image record in DB
+    image = models.PenguinImage(
+        penguin_id=penguin_id,
+        image_path=file_path
+    )
+    db.add(image)
+    db.commit()
+    db.refresh(image)
+
+    return {"message": "Image uploaded", "image_path": file_path}
 
 
