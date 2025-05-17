@@ -67,27 +67,91 @@ def get_stage_counts(db: Session):
     return counts
 
 
+
+
 def get_colony_stats(db: Session):
-    stats = {
-        "total_penguins": 0,
-        "not started": 0,
-        "moulting": 0,
-        "done": 0
-    }
+    total_penguins = db.query(models.Penguin).count()
 
-    stats["total_penguins"] = db.query(func.count(Penguin.id)).scalar()
+    if total_penguins == 0:
+        return {
+            "total_penguins": 0,
+            "moulting_stages": {},
+            "average_mass": None,
+            "stddev_mass": None,
+            "min_mass": None,
+            "max_mass": None,
+            "at_risk_count": 0,
+            "at_risk_percentage": "0%",
+            "never_logged_count": 0,
+            "average_hours_since_seen": None,
+            "latest_seen": None
+        }
 
-    result = (
-        db.query(Penguin.status, func.count(Penguin.id))
-        .group_by(Penguin.status)
+    # Moulting stage breakdown
+    moulting_counts = (
+        db.query(models.Penguin.status, func.count(models.Penguin.id))
+        .group_by(models.Penguin.status)
         .all()
     )
+    moulting_stages = {stage: count for stage, count in moulting_counts}
 
-    for stage, count in result:
-        if stage in stats:
-            stats[stage] = count
+    # Mass stats
+    stats = db.query(
+        func.avg(models.Penguin.mass),
+        func.stddev_pop(models.Penguin.mass),
+        func.min(models.Penguin.mass),
+        func.max(models.Penguin.mass)
+    ).first()
+    avg_mass, std_mass, min_mass, max_mass = stats
 
-    return stats
+    # Risky penguins
+    at_risk_count = db.query(models.Penguin).filter(models.Penguin.danger_flag == True).count()
+    at_risk_percentage = f"{(at_risk_count / total_penguins * 100):.2f}%" if total_penguins else "0%"
+
+    # Never logged penguins
+    never_logged_count = (
+        db.query(models.Penguin)
+        .filter(~models.Penguin.logs.any())
+        .count()
+    )
+
+    # Average hours since last seen
+    now = datetime.utcnow()
+    last_seen_times = (
+        db.query(models.MoultingLog.penguin_id, func.max(models.MoultingLog.date))
+        .group_by(models.MoultingLog.penguin_id)
+        .all()
+    )
+    if last_seen_times:
+        avg_hours = sum([(now - log_time).total_seconds() / 3600 for _, log_time in last_seen_times]) / len(last_seen_times)
+    else:
+        avg_hours = None
+
+    # Latest seen penguin
+    latest_seen_log = (
+        db.query(models.MoultingLog)
+        .order_by(models.MoultingLog.date.desc())
+        .first()
+    )
+    latest_seen = {
+        "penguin_id": latest_seen_log.penguin_id,
+        "last_seen": latest_seen_log.date
+    } if latest_seen_log else None
+
+    return {
+        "total_penguins": total_penguins,
+        "moulting_stages": moulting_stages,
+        "average_mass": avg_mass,
+        "stddev_mass": std_mass,
+        "min_mass": min_mass,
+        "max_mass": max_mass,
+        "at_risk_count": at_risk_count,
+        "at_risk_percentage": at_risk_percentage,
+        "never_logged_count": never_logged_count,
+        "average_hours_since_seen": avg_hours,
+        "latest_seen": latest_seen
+    }
+
 # crud.py
 def get_unlogged_penguins(db: Session):
     one_day_ago = datetime.utcnow() - timedelta(days=1)
