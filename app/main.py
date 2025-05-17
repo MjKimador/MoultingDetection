@@ -1,19 +1,21 @@
-try:
-    from fastapi import FastAPI, Depends, UploadFile, File, Form, HTTPException
-    from sqlalchemy.orm import Session, joinedload
-    from sqlalchemy import func
-    from . import models, schemas, crud
-    from .database import engine, SessionLocal, Base
-    import os, io, csv
-    from uuid import uuid4
-    from typing import Optional, List
-    from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import StreamingResponse
-    from datetime import datetime
-except Exception as e:
-    import sys
-    print(f"IMPORT ERROR: {e}", file=sys.stderr)
-    raise
+from fastapi import UploadFile, File
+import os
+from datetime import datetime
+from typing import Optional
+from fastapi import FastAPI, Depends
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+from . import models, schemas, crud
+from .database import engine, SessionLocal, Base
+from typing import List
+from fastapi import HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+import csv
+import io
+from sqlalchemy.orm import joinedload
+from fastapi import UploadFile, File, Form
+from uuid import uuid4
 
 
 
