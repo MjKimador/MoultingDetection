@@ -1,19 +1,19 @@
-from fastapi import UploadFile, File
-import os
-from datetime import datetime
-from typing import Optional
-from fastapi import FastAPI, Depends
-from sqlalchemy import func
-from sqlalchemy.orm import Session
-from . import models, schemas, crud
-from .database import engine, SessionLocal, Base
-from typing import List
-from fastapi import HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-import csv
-import io
-
+try:
+    from fastapi import FastAPI, Depends, UploadFile, File, Form, HTTPException
+    from sqlalchemy.orm import Session, joinedload
+    from sqlalchemy import func
+    from . import models, schemas, crud
+    from .database import engine, SessionLocal, Base
+    import os, io, csv
+    from uuid import uuid4
+    from typing import Optional, List
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import StreamingResponse
+    from datetime import datetime
+except Exception as e:
+    import sys
+    print(f"IMPORT ERROR: {e}", file=sys.stderr)
+    raise
 
 
 
@@ -185,34 +185,81 @@ def download_penguins_csv(db: Session = Depends(get_db)):
     return StreamingResponse(output, media_type="text/csv", headers={
         "Content-Disposition": "attachment; filename=penguins.csv"
     })
-@app.post("/penguins/{penguin_id}/upload-image")
-def upload_penguin_image(
+
+@app.post("/penguins/{penguin_id}/upload-image-log")
+def upload_image_and_log(
     penguin_id: int,
-    file: UploadFile = File(...),
+    stage: str = Form(...),
+    mass: float = Form(...),
+    image: UploadFile = File(...),
     db: Session = Depends(get_db)
-):
-    # Ensure penguin exists
+    ):
+    # Save image
+    upload_dir = "static/images"
+    os.makedirs(upload_dir, exist_ok=True)
+    image_ext = os.path.splitext(image.filename)[-1]
+    image_filename = f"{uuid4().hex}{image_ext}"
+    image_path = os.path.join(upload_dir, image_filename)
+
+    with open(image_path, "wb") as buffer:
+        buffer.write(image.file.read())
+
+    image_url = f"/static/images/{image_filename}"
+
+    # Save image to PenguinImage table
+    db_image = models.PenguinImage(penguin_id=penguin_id, image_path=image_url)
+    db.add(db_image)
+
+    # Create moulting log entry
+    moulting_log = models.MoultingLog(
+        penguin_id=penguin_id,
+        stage=stage,
+        mass=mass,
+        image_url=image_url
+    )
+    db.add(moulting_log)
+
+    # 🔁 Update Penguin summary info
     penguin = db.query(models.Penguin).filter(models.Penguin.id == penguin_id).first()
+    if penguin:
+        penguin.status = stage
+        penguin.mass = mass
+        penguin.last_seen = datetime.utcnow()
+
+    db.commit()
+    
+    return {
+        "message": "Image and moulting log uploaded successfully.",
+        "penguin_id": penguin_id,
+        "stage": stage,
+        "mass": mass,
+        "image_url": image_url
+    }
+
+
+@app.get("/penguins/{penguin_id}/weight-trend")
+def get_weight_trend(penguin_id: int, db: Session = Depends(get_db)):
+    logs = (
+        db.query(models.MoultingLog)
+        .filter(models.MoultingLog.penguin_id == penguin_id)
+        .order_by(models.MoultingLog.date.asc())
+        .all()
+    )
+    return [
+    {"date": log.date, "mass": log.mass, "image_url": log.image_url}
+    for log in logs if log.mass is not None
+    ]
+
+@app.get("/penguins/{penguin_id}/with-logs", response_model=schemas.PenguinOutWithLogs)
+def get_penguin_with_logs(penguin_id: int, db: Session = Depends(get_db)):
+    penguin = (
+        db.query(models.Penguin)
+        .options(joinedload(models.Penguin.logs))
+        .filter(models.Penguin.id == penguin_id)
+        .first()
+    )
     if not penguin:
         raise HTTPException(status_code=404, detail="Penguin not found")
-
-    # Save file to disk
-    file_ext = file.filename.split(".")[-1]
-    filename = f"{penguin_id}_{int(datetime.utcnow().timestamp())}.{file_ext}"
-    file_path = os.path.join("images", filename)
-
-    with open(file_path, "wb") as image_file:
-        image_file.write(file.file.read())
-
-    # Save image record in DB
-    image = models.PenguinImage(
-        penguin_id=penguin_id,
-        image_path=file_path
-    )
-    db.add(image)
-    db.commit()
-    db.refresh(image)
-
-    return {"message": "Image uploaded", "image_path": file_path}
+    return penguin
 
 

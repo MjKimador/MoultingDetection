@@ -25,15 +25,19 @@ class Penguin(Base):
     created_at = Column(DateTime, default=func.now())
     moulting_logs = relationship("MoultingLog", back_populates="penguin")
     images = relationship("PenguinImage", backref="penguin")
+    logs = relationship("MoultingLog", back_populates="penguin")
 
 class MoultingLog(Base):
     __tablename__ = "moulting_logs"
+
     id = Column(Integer, primary_key=True, index=True)
     penguin_id = Column(Integer, ForeignKey("penguins.id"))
-    date = Column(DateTime, default=func.now())
-    stage = Column(Enum(MoultingStage))
-    #image_url = Column(String(255), nullable=True)  # or image_path if local
-    penguin = relationship("Penguin", back_populates="moulting_logs")
+    date = Column(DateTime, default=datetime.utcnow)
+    stage = Column(String(50))
+    mass = Column(Float)  # Add this line
+    image_url = Column(String(255), nullable=True)
+    penguin = relationship("Penguin", back_populates="logs")
+
 class PenguinImage(Base):
     __tablename__ = "penguin_images"
 

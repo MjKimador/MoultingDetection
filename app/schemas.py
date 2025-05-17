@@ -2,6 +2,8 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 from enum import Enum
+from typing import List
+from app.models import MoultingLog
 
 class MoultingStage(str, Enum):
     not_started = "not started"
@@ -23,18 +25,36 @@ class PenguinOut(PenguinBase):
     danger_flag: bool
 
     class Config:
-        orm_mode = True
+        from_attributes = True
+
 
 class MoultingLogCreate(BaseModel):
     penguin_id: int
-    stage: MoultingStage
+    stage: str
+    mass: float
+    image_url: Optional[str] = None
+
 
 class MoultingLogOut(BaseModel):
     id: int
-    penguin_id: int
     date: datetime
-    stage: MoultingStage
+    stage: str
+    mass: float
 
     class Config:
-        from_attributes = True  # Replace orm_mode for Pydantic V2
+        from_attributes = True
+
+
+class PenguinOutWithLogs(BaseModel):
+    id: int
+    name: str
+    status: str
+    mass: float
+    danger_flag: bool
+    created_at: datetime
+    logs: List[MoultingLogOut]  # 🐧 Include logs
+
+    class Config:
+        from_attributes = True
+
 

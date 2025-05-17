@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+
 from . import models, schemas
 from datetime import datetime
 from collections import Counter
@@ -23,24 +24,25 @@ def get_penguins(db: Session):
 def get_penguin(db: Session, penguin_id: int):
     return db.query(models.Penguin).filter(models.Penguin.id == penguin_id).first()
 def create_moulting_log(db: Session, log: schemas.MoultingLogCreate):
-    db_log = models.MoultingLog(**log.dict())
-    db.add(db_log)
-
-    # Update penguin's status
+    moulting_log = MoultingLog(
+        penguin_id=log.penguin_id,
+        stage=log.stage,
+        mass=log.mass,
+        image_url=log.image_url
+    )
+    db.add(moulting_log)
+    db.commit()
+    db.refresh(moulting_log)
+    # After adding the moulting log entry
     penguin = db.query(models.Penguin).filter(models.Penguin.id == log.penguin_id).first()
     if penguin:
         penguin.status = log.stage
-        penguin.last_seen = datetime.utcnow()
-
-        # Risk logic: flag if moulting but underweight (< 2.5kg)
-        if log.stage == models.MoultingStage.moulting and penguin.mass < 2.5:
-            penguin.danger_flag = True
-        else:
-            penguin.danger_flag = False
+        penguin.mass = log.mass
+        penguin.last_seen = moulting_log.date  # ✅ Use actual saved log date
 
     db.commit()
-    db.refresh(db_log)
-    return db_log
+    return moulting_log
+
 
 def get_moulting_logs_for_penguin(db: Session, penguin_id: int):
     return db.query(models.MoultingLog).filter(models.MoultingLog.penguin_id == penguin_id).all()
