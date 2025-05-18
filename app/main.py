@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 import csv
 import io
 from sqlalchemy.orm import joinedload
-from fastapi import UploadFile, File, Form
+from fastapi import UploadFile, File, Form, Depends, HTTPException
 from uuid import uuid4
 import cloudinary
 import cloudinary.uploader
@@ -215,24 +215,23 @@ def upload_image_and_log(
     mass: float = Form(...),
     image: UploadFile = File(...),
     db: Session = Depends(get_db)
-    ):
-    # Save image
-    upload_dir = "static/images"
-    os.makedirs(upload_dir, exist_ok=True)
-    image_ext = os.path.splitext(image.filename)[-1]
-    image_filename = f"{uuid4().hex}{image_ext}"
-    image_path = os.path.join(upload_dir, image_filename)
+):
+    # 1️⃣ Upload image to Cloudinary
+    try:
+        upload_result = cloudinary.uploader.upload(image.file)
+        image_url = upload_result["secure_url"]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
 
-    with open(image_path, "wb") as buffer:
-        buffer.write(image.file.read())
-
-    image_url = f"/static/images/{image_filename}"
-
-    # Save image to PenguinImage table
-    db_image = models.PenguinImage(penguin_id=penguin_id, image_path=image_url)
+    # 2️⃣ Store in penguin_images table
+    db_image = models.PenguinImage(
+        penguin_id=penguin_id,
+        image_path=image_url,
+        timestamp=datetime.utcnow()
+    )
     db.add(db_image)
 
-    # Create moulting log entry
+    # 3️⃣ Store in moulting_logs table
     moulting_log = models.MoultingLog(
         penguin_id=penguin_id,
         stage=stage,
@@ -241,7 +240,7 @@ def upload_image_and_log(
     )
     db.add(moulting_log)
 
-    # 🔁 Update Penguin summary info
+    # 4️⃣ Update penguin table summary info
     penguin = db.query(models.Penguin).filter(models.Penguin.id == penguin_id).first()
     if penguin:
         penguin.status = stage
@@ -249,7 +248,7 @@ def upload_image_and_log(
         penguin.last_seen = datetime.utcnow()
 
     db.commit()
-    
+
     return {
         "message": "Image and moulting log uploaded successfully.",
         "penguin_id": penguin_id,
@@ -257,7 +256,6 @@ def upload_image_and_log(
         "mass": mass,
         "image_url": image_url
     }
-
 
 @app.get("/penguins/{penguin_id}/weight-trend")
 def get_weight_trend(penguin_id: int, db: Session = Depends(get_db)):
