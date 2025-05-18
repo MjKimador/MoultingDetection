@@ -37,6 +37,9 @@ def get_db():
         yield db
     finally:
         db.close()
+@app.get("/")
+def root():
+    return {"status": "FastAPI backend is live 🚀"}
 
 @app.post("/penguins/", response_model=schemas.PenguinOut)
 def create_penguin(penguin: schemas.PenguinCreate, db: Session = Depends(get_db)):
