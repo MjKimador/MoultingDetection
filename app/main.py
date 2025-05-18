@@ -84,28 +84,28 @@ def get_all_penguins(sort_by: Optional[str] = None, db: Session = Depends(get_db
         row.pid: row.last_seen for row in db.query(subquery).all()
     }
 
-    result = []
-    for p in penguins:
-        # Get latest image for each penguin
-        latest_image = (
-            db.query(models.PenguinImage)
-            .filter(models.PenguinImage.penguin_id == p.id)
-            .order_by(models.PenguinImage.timestamp.desc())
-            .first()
-        )
+    
+    # Get latest image for each penguin
+    latest_image = (
+        db.query(models.PenguinImage)
+        .filter(models.PenguinImage.penguin_id == p.id)
+        .order_by(models.PenguinImage.timestamp.desc())
+        .first()
+    )
 
-        result.append({
-            "id": p.id,
-            "name": p.name,
-            "status": p.status,
-            "mass": p.mass,
-            "danger_flag": p.danger_flag,
-            "last_seen": last_seen_lookup.get(p.id, "Never logged"),
-            "images": sorted([img.image_path for img in p.images], key=lambda x: img.timestamp, reverse=True)
+    return [
+    {
+        "id": p.id,
+        "name": p.name,
+        "status": p.status,
+        "mass": p.mass,
+        "danger_flag": p.danger_flag,
+        "last_seen": last_seen_lookup.get(p.id, "Never logged"),
+        "images": sorted([img.image_path for img in p.images], key=lambda x: img.timestamp, reverse=True)
 
-        })
-
-    return result
+    }
+    for p in penguins
+    ]
 
 
 @app.post("/logs/", response_model=schemas.MoultingLogOut)
