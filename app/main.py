@@ -16,7 +16,9 @@ import io
 from sqlalchemy.orm import joinedload
 from fastapi import UploadFile, File, Form
 from uuid import uuid4
-
+import cloudinary
+import cloudinary.uploader
+from fastapi import UploadFile, File
 
 
 Base.metadata.create_all(bind=engine)
@@ -37,6 +39,21 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+
+# Set up Cloudinary config
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET")
+)
+
+@app.post("/upload-image")
+async def upload_image(file: UploadFile = File(...)):
+    upload_result = cloudinary.uploader.upload(file.file)
+    return {"image_url": upload_result["secure_url"]}
+
 @app.get("/")
 def root():
     return {"status": "FastAPI backend is live 🚀"}
