@@ -101,7 +101,8 @@ def get_all_penguins(sort_by: Optional[str] = None, db: Session = Depends(get_db
             "mass": p.mass,
             "danger_flag": p.danger_flag,
             "last_seen": last_seen_lookup.get(p.id, "Never logged"),
-            "latest_image": latest_image.image_path if latest_image else None
+            "images": sorted([img.image_path for img in p.images], key=lambda x: img.timestamp, reverse=True)
+
         })
 
     return result
