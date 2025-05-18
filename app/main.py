@@ -85,12 +85,18 @@ def get_all_penguins(sort_by: Optional[str] = None, db: Session = Depends(get_db
 
     result = []
     for p in penguins:
-        latest_image = (
-            db.query(models.PenguinImage)
-            .filter(models.PenguinImage.penguin_id == p.id)
-            .order_by(models.PenguinImage.timestamp.desc())
-            .first()
+        try:
+            latest_image = (
+                db.query(models.PenguinImage)
+                .filter(models.PenguinImage.penguin_id == p.id)
+                .order_by(models.PenguinImage.timestamp.desc())
+                .first()
         )
+        except Exception as e:
+            print(f"🐞 Error fetching image for penguin {p.id}: {e}")
+            latest_image = None
+
+            
 
         result.append({
             "id": p.id,
