@@ -19,7 +19,7 @@ from uuid import uuid4
 import cloudinary
 import cloudinary.uploader
 from fastapi import UploadFile, File
-
+from sqlalchemy import desc
 
 Base.metadata.create_all(bind=engine)
 
@@ -62,7 +62,10 @@ def root():
 def create_penguin(penguin: schemas.PenguinCreate, db: Session = Depends(get_db)):
     return crud.create_penguin(db, penguin)
 
-@app.get("/penguins/")
+
+
+
+@app.get("/penguins")
 def get_all_penguins(sort_by: Optional[str] = None, db: Session = Depends(get_db)):
     penguins = crud.get_all_penguins_sorted(db, sort_by)
 
@@ -81,18 +84,28 @@ def get_all_penguins(sort_by: Optional[str] = None, db: Session = Depends(get_db
         row.pid: row.last_seen for row in db.query(subquery).all()
     }
 
-    return [
-        {
+    result = []
+    for p in penguins:
+        # Get latest image for each penguin
+        latest_image = (
+            db.query(models.PenguinImage)
+            .filter(models.PenguinImage.penguin_id == p.id)
+            .order_by(models.PenguinImage.timestamp.desc())
+            .first()
+        )
+
+        result.append({
             "id": p.id,
             "name": p.name,
             "status": p.status,
             "mass": p.mass,
             "danger_flag": p.danger_flag,
             "last_seen": last_seen_lookup.get(p.id, "Never logged"),
-            "images": [img.image_path for img in p.images]
-        }
-        for p in penguins
-    ]
+            "latest_image": latest_image.image_path if latest_image else None
+        })
+
+    return result
+
 
 @app.post("/logs/", response_model=schemas.MoultingLogOut)
 def add_log(log: schemas.MoultingLogCreate, db: Session = Depends(get_db)):
