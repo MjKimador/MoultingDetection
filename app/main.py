@@ -69,7 +69,7 @@ def create_penguin(penguin: schemas.PenguinCreate, db: Session = Depends(get_db)
 def get_all_penguins(sort_by: Optional[str] = None, db: Session = Depends(get_db)):
     penguins = crud.get_all_penguins_sorted(db, sort_by)
 
-    # Subquery to get latest log date per penguin
+    # Subquery for last seen per penguin
     subquery = (
         db.query(
             models.MoultingLog.penguin_id.label("pid"),
@@ -79,34 +79,30 @@ def get_all_penguins(sort_by: Optional[str] = None, db: Session = Depends(get_db
         .subquery()
     )
 
-    # Build a lookup of penguin_id → last_seen
     last_seen_lookup = {
         row.pid: row.last_seen for row in db.query(subquery).all()
     }
 
-    
-    # Get latest image for each penguin
-    latest_image = (
-        db.query(models.PenguinImage)
-        .filter(models.PenguinImage.penguin_id == p.id)
-        .order_by(models.PenguinImage.timestamp.desc())
-        .first()
-    )
+    result = []
+    for p in penguins:
+        latest_image = (
+            db.query(models.PenguinImage)
+            .filter(models.PenguinImage.penguin_id == p.id)
+            .order_by(models.PenguinImage.timestamp.desc())
+            .first()
+        )
 
-    return [
-    {
-        "id": p.id,
-        "name": p.name,
-        "status": p.status,
-        "mass": p.mass,
-        "danger_flag": p.danger_flag,
-        "last_seen": last_seen_lookup.get(p.id, "Never logged"),
-        "images": sorted([img.image_path for img in p.images], key=lambda x: img.timestamp, reverse=True)
+        result.append({
+            "id": p.id,
+            "name": p.name,
+            "status": p.status,
+            "mass": p.mass,
+            "danger_flag": p.danger_flag,
+            "last_seen": last_seen_lookup.get(p.id, "Never logged"),
+            "latest_image": latest_image.image_path if latest_image else None
+        })
 
-    }
-    for p in penguins
-    ]
-
+    return result
 
 @app.post("/logs/", response_model=schemas.MoultingLogOut)
 def add_log(log: schemas.MoultingLogCreate, db: Session = Depends(get_db)):
