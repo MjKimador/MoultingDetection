@@ -10,7 +10,6 @@ DB_URL = (
     f"{os.getenv('MYSQL_DB')}"
 )
 
-
 engine = create_engine(DB_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
