@@ -1,6 +1,6 @@
 from fastapi import UploadFile, File
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from fastapi import FastAPI, Depends
 from sqlalchemy import func
@@ -105,7 +105,7 @@ def get_all_penguins(sort_by: Optional[str] = None, db: Session = Depends(get_db
             "mass": p.mass,
             "danger_flag": p.danger_flag,
             "last_seen": last_seen_lookup.get(p.id, "Never logged"),
-            "latest_image": latest_image.image_path if latest_image else None
+            "latest_image": latest_image.image_path if latest_image else None  # ✅ Add this
         })
 
     return result

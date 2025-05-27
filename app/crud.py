@@ -6,13 +6,13 @@ from collections import Counter
 from sqlalchemy import func
 from app.models import Penguin
 from sqlalchemy import or_, and_
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.models import Penguin, MoultingLog
 from typing import Optional
 
 
 def create_penguin(db: Session, penguin: schemas.PenguinCreate):
-    db_penguin = models.Penguin(**penguin.dict(), last_seen=datetime.utcnow())
+    db_penguin = models.Penguin(**penguin.dict(), last_seen=datetime.now(timezone.utc))
     db.add(db_penguin)
     db.commit()
     db.refresh(db_penguin)
