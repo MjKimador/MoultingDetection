@@ -243,8 +243,7 @@ def upload_image_and_log(
     db_image = models.PenguinImage(
         penguin_id=penguin_id,
         image_path=image_url,
-        timestamp=datetime.utcnow()
-    )
+        timestamp=datetime.now(timezone.utc)
     db.add(db_image)
 
     # 3️⃣ Store in moulting_logs table
